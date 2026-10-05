@@ -1,3 +1,18 @@
+## 0.8.1+natlink.1
+
+Natlink fork of 0.8.1 (iOS only; Dart and Android unchanged).
+
+* iOS: device-motion and heading updates start in `onListen` and stop in
+  `onCancel`. Upstream started device motion in the plugin initialiser, at
+  app launch, and never stopped it, so CoreMotion ran for the whole process
+  lifetime whether or not anything listened, in the background included.
+* iOS: `headingFilter` raised from 0.1° to 1°, so magnetometer jitter on a
+  still phone no longer crosses the channel several times a second.
+* iOS: device-motion interval lowered from 30 Hz to 15 Hz; it is only read
+  when a heading update arrives.
+* Android manifest matches the published 0.8.1 archive (no `package`
+  attribute; the namespace comes from Gradle).
+
 ## 0.8.1
 * Bump the compileSdkVersion to 34 to support Android 14
 * Support the AGP >= 8

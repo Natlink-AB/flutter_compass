@@ -10,15 +10,32 @@ public class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHa
     private var location: CLLocationManager = CLLocationManager();
     private var motion: CMMotionManager = CMMotionManager();
 
+    // Below this many degrees of change Core Location does not deliver a
+    // heading update. The upstream value of 0.1 let a phone lying still send
+    // several events a second of magnetometer jitter across the channel, each
+    // one a Dart-side state change. One degree is under a pixel at the rim of
+    // the app's 40 pt compass face, and the app's own stationary deadband
+    // (two degrees) sits above it, so nothing the UI could show is lost.
+    private static let headingFilterDegrees: CLLocationDegrees = 1.0;
+
+    // Device motion is only read when a heading update arrives, to compute
+    // the heading out of the back of the device for the camera mode. 15 Hz
+    // keeps that attitude at most ~67 ms stale, which a turning phone cannot
+    // see, at half the sensor-fusion work of the upstream 30 Hz.
+    private static let deviceMotionInterval: TimeInterval = 1.0 / 15.0;
 
     init(channel: FlutterEventChannel) {
         super.init()
         location.delegate = self
-        location.headingFilter = 0.1;
+        location.headingFilter = SwiftFlutterCompassPlugin.headingFilterDegrees;
         channel.setStreamHandler(self);
 
-        motion.deviceMotionUpdateInterval = 1.0 / 30.0;
-        motion.startDeviceMotionUpdates(using: CMAttitudeReferenceFrame.xMagneticNorthZVertical);
+        motion.deviceMotionUpdateInterval = SwiftFlutterCompassPlugin.deviceMotionInterval;
+        // Nothing is started here. Upstream started device motion in this
+        // initialiser, which runs at plugin registration during app launch,
+        // and never stopped it, so CoreMotion ran for the whole process
+        // lifetime, in the background included, whether or not anything
+        // listened. Both feeds now start in onListen and stop in onCancel.
     }
 
 
@@ -30,6 +47,9 @@ public class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHa
     public func onListen(withArguments arguments: Any?,
                          eventSink: @escaping FlutterEventSink) -> FlutterError? {
         self.eventSink = eventSink;
+        if (motion.isDeviceMotionAvailable && !motion.isDeviceMotionActive) {
+            motion.startDeviceMotionUpdates(using: CMAttitudeReferenceFrame.xMagneticNorthZVertical);
+        }
         location.startUpdatingHeading();
         return nil;
     }
@@ -37,6 +57,7 @@ public class SwiftFlutterCompassPlugin: NSObject, FlutterPlugin, FlutterStreamHa
     public func onCancel(withArguments arguments: Any?) -> FlutterError? {
         eventSink = nil;
         location.stopUpdatingHeading();
+        motion.stopDeviceMotionUpdates();
         return nil;
     }
 
